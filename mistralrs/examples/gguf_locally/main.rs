@@ -8,15 +8,12 @@ async fn main() -> Result<()> {
     // We do not use any files from remote servers here, and instead load the
     // chat template from the specified file, and the tokenizer and model from a
     // local GGUF file at the path specified.
-    let model = GgufModelBuilder::new(
-        "gguf_models/mistral_v0.1/",
-        vec!["mistral-7b-instruct-v0.1.Q4_K_M.gguf"],
-    )
-    .with_chat_template("chat_templates/mistral.json")
-    .with_logging()
-    .with_paged_attn(|| PagedAttentionMetaBuilder::default().build())?
-    .build()
-    .await?;
+    let model = GgufModelBuilder::new("gguf_models/", vec!["mistral-7b-instruct-v0.1.Q4_K_M.gguf"])
+        .with_chat_template("chat_templates/mistral.json")
+        .with_logging()
+        .with_paged_attn(|| PagedAttentionMetaBuilder::default().build())?
+        .build()
+        .await?;
 
     let messages = TextMessages::new().add_message(
         TextMessageRole::User,

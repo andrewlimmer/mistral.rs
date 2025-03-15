@@ -243,10 +243,17 @@ impl MistralRsBuilder {
 
 impl Drop for MistralRs {
     fn drop(&mut self) {
+        // println!(
+        //     "drop MistralRs engine_id: {:?}",
+        //     ENGINE_ID.load(atomic::Ordering::SeqCst)
+        // );
         ENGINE_INSTRUCTIONS
             .lock()
             .expect("`ENGINE_INSTRUCTIONS` was poisioned")
-            .insert(self.engine_id, Some(EngineInstruction::Terminate));
+            .insert(
+                ENGINE_ID.load(atomic::Ordering::SeqCst),
+                Some(EngineInstruction::Terminate),
+            );
     }
 }
 
@@ -316,7 +323,7 @@ impl MistralRs {
             });
         });
 
-        let engine_id = ENGINE_ID.fetch_add(1, atomic::Ordering::SeqCst);
+        let engine_id = ENGINE_ID.load(atomic::Ordering::SeqCst);
 
         if distributed::is_daemon() {
             let request_sender = sender.write().unwrap().clone();

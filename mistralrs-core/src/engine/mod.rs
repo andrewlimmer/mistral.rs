@@ -27,7 +27,7 @@ use crate::{
     scheduler::{Scheduler, SchedulerOutput},
     sequence::{SeqStepType, StopReason},
     tools::{ToolCallingMatcher, ToolChoice},
-    CompletionResponse, RequestMessage, Response, SchedulerConfig, DEBUG,
+    CompletionResponse, RequestMessage, Response, SchedulerConfig, DEBUG, ENGINE_ID,
 };
 use rand::SeedableRng;
 use rand_isaac::Isaac64Rng;
@@ -91,7 +91,7 @@ impl Engine {
             rx,
             pipeline,
             scheduler: config.into_scheduler(),
-            id: 0,
+            id: ENGINE_ID.fetch_add(1, Ordering::SeqCst) + 1,
             truncate_sequence,
             no_kv_cache,
             prefix_cacher: PrefixCacheManagerV2::new(prefix_cache_n, no_prefix_cache),
@@ -102,6 +102,7 @@ impl Engine {
     }
 
     pub async fn run(&mut self) {
+        // println!("run: engine id: {}", self.id);
         let rng = Arc::new(std::sync::Mutex::new(Isaac64Rng::seed_from_u64(SEED)));
         let mut last_completion_ids: Vec<usize> = vec![];
         'lp: loop {
@@ -112,6 +113,7 @@ impl Engine {
                     .get(&self.id),
                 Some(Some(EngineInstruction::Terminate))
             ) {
+                // println!("run: drop engine id: {}", self.id);
                 self.replicate_request_to_daemons(&Request::Terminate);
                 break 'lp;
             }
@@ -968,7 +970,7 @@ impl Engine {
             } else {
                 seq
             };
-            self.id += 1;
+            self.id = ENGINE_ID.fetch_add(1, Ordering::SeqCst) + 1;
             self.scheduler.add_seq(seq);
         }
     }
