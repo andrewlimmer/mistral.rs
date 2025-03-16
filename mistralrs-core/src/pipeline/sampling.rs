@@ -414,7 +414,7 @@ pub async fn sample_sequence(
     if add_to_trie {
         match seq.recognizer {
             SequenceRecognizer::Llguidance(ref mut llg) => {
-                println!("{:?}", second_logprobs_response.token);
+                // println!("{:?}", second_logprobs_response.token);
                 llg.commit_token(Some(second_logprobs_response.token))
                     .map_err(candle_core::Error::msg)?;
             }

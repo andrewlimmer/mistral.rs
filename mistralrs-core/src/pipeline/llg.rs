@@ -19,11 +19,11 @@ pub fn build_tok_env(tokenizer: Tokenizer, eos: Option<String>) -> TokEnv {
 
     // Force eos token
     if let Some(eos) = eos {
-        println!(
-            "eos:{:?}, {:?}",
-            eos.as_str(),
-            env.tok_trie.get_special_token(eos.as_str()).unwrap()
-        );
+        // println!(
+        //     "eos:{:?}, {:?}",
+        //     eos.as_str(),
+        //     env.tok_trie.get_special_token(eos.as_str()).unwrap()
+        // );
         env.tok_trie
             .with_eos_token(env.tok_trie.get_special_token(eos.as_str()).unwrap());
         env.tok_trie = env.tok_trie.build_chat_mode_trie();
