@@ -11,7 +11,7 @@ async fn main() -> Result<()> {
     let model = GgufModelBuilder::new("gguf_models/", vec!["mistral-7b-instruct-v0.1.Q4_K_M.gguf"])
         .with_chat_template("chat_templates/mistral.json")
         .with_logging()
-        .with_paged_attn(|| PagedAttentionMetaBuilder::default().build())?
+        // .with_paged_attn(|| PagedAttentionMetaBuilder::default().build())?
         .build()
         .await?;
 

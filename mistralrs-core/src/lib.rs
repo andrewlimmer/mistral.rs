@@ -304,7 +304,6 @@ impl MistralRs {
             device,
             category: category.clone(),
         };
-
         let engine_handler = thread::spawn(move || {
             let rt = Runtime::new().unwrap();
             rt.block_on(async move {

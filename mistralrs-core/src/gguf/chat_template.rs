@@ -14,7 +14,6 @@ impl TryFrom<ContentMetadata<'_>> for PropsGGUFTemplate {
 
     fn try_from(c: ContentMetadata) -> Result<Self, Self::Error> {
         // No required keys
-
         let props = Self {
             chat_template: c.get_option_value("chat_template")?,
         };

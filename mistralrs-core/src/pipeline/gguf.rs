@@ -506,7 +506,7 @@ impl Loader for GGUFLoader {
             Model::Starcoder2(ref p) => p.max_seq_len,
             Model::Qwen2(ref p) => p.max_seq_len,
         };
-        let tok_env = build_tok_env(tokenizer.clone());
+        let tok_env = build_tok_env(tokenizer.clone(), eos.clone());
         let num_hidden_layers = match model {
             Model::Llama(ref model) => model.cache.normal().0.len(),
             Model::Phi2(ref model) => model.cache.normal().0.len(),

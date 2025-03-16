@@ -46,6 +46,7 @@ pub(crate) async fn finish_or_add_toks_to_seq(
             .decode(&[logprobs.token]),
         &is_done,
     );
+
     // Handle streaming requests
     if seq.get_mut_group().is_streaming {
         let mut tool_use_still_possible = false;
@@ -352,7 +353,6 @@ pub async fn sample_sequence(
             sample_speculative,
         )?
     };
-
     let bias_if_not_allowed = match &mut seq.recognizer {
         SequenceRecognizer::Llguidance(ref mut llg) => {
             let step_res = llg.compute_mask().map_err(candle_core::Error::msg)?;
@@ -366,7 +366,6 @@ pub async fn sample_sequence(
                             acc[idx] = 0.0;
                         }
                     });
-
                     Some(acc)
                 }
             } else if step_res.is_stop() {
@@ -380,6 +379,7 @@ pub async fn sample_sequence(
         }
         SequenceRecognizer::None => None,
     };
+
     let second_logprobs_response = match bias_if_not_allowed {
         Some(acc) => {
             let new_logits = (logits + Tensor::from_slice(&acc, acc.len(), &Device::Cpu)?)?;
@@ -414,6 +414,7 @@ pub async fn sample_sequence(
     if add_to_trie {
         match seq.recognizer {
             SequenceRecognizer::Llguidance(ref mut llg) => {
+                println!("{:?}", second_logprobs_response.token);
                 llg.commit_token(Some(second_logprobs_response.token))
                     .map_err(candle_core::Error::msg)?;
             }

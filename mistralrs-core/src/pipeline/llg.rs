@@ -11,11 +11,24 @@ use tokenizers::Tokenizer;
 
 use crate::Constraint;
 
-pub fn build_tok_env(tokenizer: Tokenizer) -> TokEnv {
+pub fn build_tok_env(tokenizer: Tokenizer, eos: Option<String>) -> TokEnv {
     let bt = toktrie_hf_tokenizers::ByteTokenizer::from_tokenizer(tokenizer)
         .expect("Failed to create ByteTokenizer from Tokenizer");
-    let env = toktrie_hf_tokenizers::ByteTokenizerEnv::new(bt, None)
+    let mut env = toktrie_hf_tokenizers::ByteTokenizerEnv::new(bt, None)
         .expect("Failed to create ByteTokenizerEnv");
+
+    // Force eos token
+    if let Some(eos) = eos {
+        println!(
+            "eos:{:?}, {:?}",
+            eos.as_str(),
+            env.tok_trie.get_special_token(eos.as_str()).unwrap()
+        );
+        env.tok_trie
+            .with_eos_token(env.tok_trie.get_special_token(eos.as_str()).unwrap());
+        env.tok_trie = env.tok_trie.build_chat_mode_trie();
+    }
+
     Arc::new(env)
 }
 

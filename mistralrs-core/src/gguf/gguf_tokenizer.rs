@@ -66,6 +66,7 @@ impl TryFrom<ContentMetadata<'_>> for PropsGGUF {
     }
 }
 
+#[derive(Debug)]
 struct AddedTokensCollection {
     bos: String,
     eos: String,
@@ -102,7 +103,6 @@ pub fn convert_gguf_to_hf_tokenizer<R: std::io::Seek + std::io::Read>(
     }
 
     let AddedTokensCollection { bos, eos, unk } = special_tokens;
-
     Ok(GgufTokenizerConversion {
         tokenizer,
         bos: Some(bos),
@@ -270,7 +270,6 @@ fn bpe_tokenizer(p: &PropsGGUF) -> Result<(Tokenizer, TokenizerKind, AddedTokens
     }
 
     let special_tokens = add_special_tokens(p, &mut tokenizer, bos, eos, unk);
-
     Ok((tokenizer, TokenizerKind::Bpe, special_tokens))
 }
 

@@ -613,7 +613,7 @@ impl Loader for VisionLoader {
         };
 
         let max_seq_len = model.max_seq_len();
-        let tok_env = build_tok_env(tokenizer.clone());
+        let tok_env = build_tok_env(tokenizer.clone(), None);
         let num_hidden_layers = match model.cache() {
             EitherCache::Full(full) => full.lock().len(),
             EitherCache::Normal(normal) => normal.lock().unwrap().0.len(),

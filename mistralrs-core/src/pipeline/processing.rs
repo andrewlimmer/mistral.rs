@@ -126,6 +126,7 @@ pub(crate) fn apply_chat_template(
     } else {
         None
     };
+
     let unk_tok = if let Some(ref unk) = chat_template.unk_token {
         match unk.0 {
             Either::Left(ref lit) => Some(lit.to_string()),

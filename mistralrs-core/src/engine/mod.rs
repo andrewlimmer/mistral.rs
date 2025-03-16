@@ -102,7 +102,6 @@ impl Engine {
     }
 
     pub async fn run(&mut self) {
-        // println!("run: engine id: {}", self.id);
         let rng = Arc::new(std::sync::Mutex::new(Isaac64Rng::seed_from_u64(SEED)));
         let mut last_completion_ids: Vec<usize> = vec![];
         'lp: loop {
@@ -113,7 +112,6 @@ impl Engine {
                     .get(&self.id),
                 Some(Some(EngineInstruction::Terminate))
             ) {
-                // println!("run: drop engine id: {}", self.id);
                 self.replicate_request_to_daemons(&Request::Terminate);
                 break 'lp;
             }
@@ -924,7 +922,6 @@ impl Engine {
             } else {
                 None
             };
-
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Time travel has occurred!");
