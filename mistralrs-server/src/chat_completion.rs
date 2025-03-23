@@ -15,7 +15,7 @@ use crate::{
     openai::{ChatCompletionRequest, Grammar, MessageInnerContent, StopTokens},
     util,
 };
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use axum::{
     extract::{Json, State},
     http::{self, StatusCode},
@@ -41,9 +41,15 @@ impl std::fmt::Display for ModelErrorMessage {
 }
 impl std::error::Error for ModelErrorMessage {}
 
+enum DoneState {
+    Running,
+    SendingDone,
+    Done,
+}
+
 pub struct Streamer {
     rx: Receiver<Response>,
-    is_done: bool,
+    done_state: DoneState,
     state: Arc<MistralRs>,
 }
 
@@ -51,9 +57,19 @@ impl futures::Stream for Streamer {
     type Item = Result<Event, axum::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.is_done {
-            return Poll::Ready(None);
+        match self.done_state {
+            DoneState::SendingDone => {
+                // https://platform.openai.com/docs/api-reference/completions/create
+                // If true, returns a stream of events that happen during the Run as server-sent events, terminating when the Run enters a terminal state with a data: [DONE] message.
+                self.done_state = DoneState::Done;
+                return Poll::Ready(Some(Ok(Event::default().data("[DONE]"))));
+            }
+            DoneState::Done => {
+                return Poll::Ready(None);
+            }
+            DoneState::Running => (),
         }
+
         match self.rx.poll_recv(cx) {
             Poll::Ready(Some(resp)) => match resp {
                 Response::ModelError(msg, _) => {
@@ -61,7 +77,8 @@ impl futures::Stream for Streamer {
                         self.state.clone(),
                         &ModelErrorMessage(msg.to_string()),
                     );
-                    self.is_done = true;
+                    // Done now, just need to send the [DONE]
+                    self.done_state = DoneState::SendingDone;
                     Poll::Ready(Some(Ok(Event::default().data(msg))))
                 }
                 Response::ValidationError(e) => {
@@ -73,8 +90,9 @@ impl futures::Stream for Streamer {
                 }
                 Response::Chunk(response) => {
                     if response.choices.iter().all(|x| x.finish_reason.is_some()) {
-                        self.is_done = true;
+                        self.done_state = DoneState::SendingDone;
                     }
+                    // Done now, just need to send the [DONE]
                     MistralRs::maybe_log_response(self.state.clone(), &response);
                     Poll::Ready(Some(Event::default().json_data(response)))
                 }
@@ -174,16 +192,48 @@ async fn parse_request(
             for message in req_messages {
                 match message.content.deref() {
                     Either::Left(content) => {
+                        // Handle tool call
+                        let content = match content {
+                            Some(content) => content.to_string(),
+                            None => {
+                                use anyhow::Context;
+                                let calls = message.tool_calls.as_ref()
+                                    .context("No content was provided, expected tool calls to be provided.")?
+                                    .iter().map(|call| &call.function).collect::<Vec<_>>();
+
+                                serde_json::to_string(&calls)?
+                            }
+                        };
+
                         let mut message_map: IndexMap<
                             String,
                             Either<String, Vec<IndexMap<String, Value>>>,
                         > = IndexMap::new();
                         message_map.insert("role".to_string(), Either::Left(message.role));
-                        message_map
-                            .insert("content".to_string(), Either::Left(content.to_string()));
+                        message_map.insert("content".to_string(), Either::Left(content));
                         messages.push(message_map);
                     }
                     Either::Right(image_messages) => {
+                        // If there is only one message, it is possible a text message
+                        // found when rig is used as client. In this case, we need to check if
+                        // the message is a text message or an image message.
+                        if image_messages.len() == 1 {
+                            if !image_messages[0].contains_key("text") {
+                                anyhow::bail!("Expected `text` key in input message.");
+                            }
+                            let content = match image_messages[0]["text"].deref() {
+                                Either::Left(left) => left.to_string(),
+                                Either::Right(right) => format!("{:?}", right),
+                            };
+                            let mut message_map: IndexMap<
+                                String,
+                                Either<String, Vec<IndexMap<String, Value>>>,
+                            > = IndexMap::new();
+                            message_map.insert("role".to_string(), Either::Left(message.role));
+                            message_map.insert("content".to_string(), Either::Left(content));
+                            messages.push(message_map);
+                            continue;
+                        }
                         if image_messages.len() != 2 {
                             anyhow::bail!(
                                 "Expected 2 items for the content of a message with an image."
@@ -266,11 +316,10 @@ async fn parse_request(
             if !image_urls.is_empty() {
                 let mut images = Vec::new();
                 for url_unparsed in image_urls {
+                    use anyhow::Context;
                     let image = util::parse_image_url(&url_unparsed)
                         .await
-                        .with_context(|| {
-                            format!("Failed to parse image resource: {}", url_unparsed)
-                        })?;
+                        .context(format!("Failed to parse image resource: {}", url_unparsed))?;
 
                     images.push(image);
                 }
@@ -372,7 +421,7 @@ pub async fn chatcompletions(
     if is_streaming {
         let streamer = Streamer {
             rx,
-            is_done: false,
+            done_state: DoneState::Running,
             state,
         };
 

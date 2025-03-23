@@ -86,10 +86,14 @@ struct Args {
     #[arg(long, default_value_t = false)]
     no_kv_cache: bool,
 
-    /// JINJA chat template with `messages`, `add_generation_prompt`, `bos_token`, `eos_token`, and `unk_token` as inputs.
+    /// Chat template file with a JINJA file with `messages`, `add_generation_prompt`, `bos_token`, `eos_token`, and `unk_token` as inputs.
     /// Used if the automatic deserialization fails. If this ends with `.json` (ie., it is a file) then that template is loaded.
     #[arg(short, long)]
     chat_template: Option<String>,
+
+    /// Explicit JINJA chat template file (.jinja) to be used. If specified, this overrides all other chat templates.
+    #[arg(short, long)]
+    jinja_explicit: Option<String>,
 
     /// Source of the token for authentication.
     /// Can be in the formats: `literal:<value>`, `env:<value>`, `path:<value>`, `cache` to use a cached token, or `none` to use no token.
@@ -309,6 +313,7 @@ async fn main() -> Result<()> {
         .with_chat_template(args.chat_template)
         .with_use_flash_attn(use_flash_attn)
         .with_prompt_chunksize(prompt_chunksize)
+        .with_jinja_explicit(args.jinja_explicit)
         .build()?;
 
     #[cfg(feature = "metal")]
@@ -317,7 +322,7 @@ async fn main() -> Result<()> {
     let device = if args.cpu {
         args.no_paged_attn = true;
         Device::Cpu
-    } else if cfg!(feature = "nccl") {
+    } else if mistralrs_core::distributed::use_nccl() {
         Device::Cpu
     } else {
         Device::cuda_if_available(0)?
@@ -379,7 +384,7 @@ async fn main() -> Result<()> {
         DeviceMapSetting::Auto(auto_device_map_params)
     };
 
-    let no_paged_attn = if device.is_cuda() || cfg!(feature = "nccl") {
+    let no_paged_attn = if device.is_cuda() || mistralrs_core::distributed::use_nccl() {
         args.no_paged_attn
     } else if device.is_metal() {
         !args.paged_attn

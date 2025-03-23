@@ -116,6 +116,7 @@ impl SingleCache {
             let ad = Tensor::zeros(shape, src.dtype(), src.device())?;
             self.all_data = Some(ad);
         };
+
         // Expand kv cache
         if self.current_seq_len + seq_len > self.capacity_seq_len {
             let diff = self.current_seq_len + seq_len - self.capacity_seq_len;
@@ -134,7 +135,9 @@ impl SingleCache {
             ad.slice_set(self.all_data.as_ref().unwrap(), self.dim, 0)?;
             self.all_data = Some(ad);
         }
+
         let ad = self.all_data.as_mut().unwrap();
+
         ad.slice_set(src, self.dim, self.current_seq_len)?;
         self.current_seq_len += seq_len;
         Ok(())
@@ -152,16 +155,18 @@ pub struct RotatingCache {
     // max_seq_len is the size of the rotating buffer, it is actually allowed for the full
     // sequence to grow past this limit.
     pub max_seq_len: usize,
+    pub capacity_seq_len: usize,
 }
 
 impl RotatingCache {
-    pub fn new(dim: usize, max_seq_len: usize) -> Self {
+    pub fn new(dim: usize, max_seq_len: usize, capacity_seq_len: usize) -> Self {
         Self {
             all_data: None,
             dim,
             offset: 0,
             current_seq_len: 0,
             max_seq_len,
+            capacity_seq_len,
         }
     }
 
@@ -214,7 +219,8 @@ impl RotatingCache {
                 self.max_seq_len
             );
         }
-        self.current_seq_len = len % self.max_seq_len;
+        self.current_seq_len = len;
+        self.offset = len % self.max_seq_len;
         Ok(())
     }
 
@@ -224,10 +230,34 @@ impl RotatingCache {
         // self.all_data.get_or_insert_with.
         if self.all_data.is_none() {
             let mut shape = src.dims().to_vec();
-            shape[self.dim] = self.max_seq_len;
+            shape[self.dim] = self.capacity_seq_len;
             let ad = Tensor::zeros(shape, src.dtype(), src.device())?;
             self.all_data = Some(ad)
         };
+
+        // Expand kv cache, this case is a little more complex.
+        if (self.current_seq_len + seq_len > self.capacity_seq_len
+            && self.current_seq_len + seq_len < self.max_seq_len)
+            || self.current_seq_len == 0
+        {
+            let diff = self.current_seq_len + seq_len - self.capacity_seq_len;
+            let n_blocks_needed = diff.div_ceil(NormalCache::CACHE_GROW_SIZE);
+            self.capacity_seq_len += n_blocks_needed * NormalCache::CACHE_GROW_SIZE;
+            self.capacity_seq_len = self.capacity_seq_len.min(self.max_seq_len);
+            if self.capacity_seq_len > self.max_seq_len {
+                candle_core::bail!(
+                    "kv-cache: requested capacity ({}) above max seq len ({})",
+                    self.capacity_seq_len,
+                    self.max_seq_len
+                )
+            }
+            let mut shape = src.dims().to_vec();
+            shape[self.dim] = self.capacity_seq_len;
+            let ad = Tensor::zeros(shape, src.dtype(), src.device())?;
+            ad.slice_set(self.all_data.as_ref().unwrap(), self.dim, 0)?;
+            self.all_data = Some(ad);
+        }
+
         let ad = self.all_data.as_mut().unwrap();
 
         self.current_seq_len += seq_len;
@@ -278,9 +308,9 @@ impl KvCache {
         Self::Normal { k, v }
     }
 
-    pub fn new_rotating(dim: usize, sliding_window: usize) -> Self {
-        let k = RotatingCache::new(dim, sliding_window);
-        let v = RotatingCache::new(dim, sliding_window);
+    pub fn new_rotating(dim: usize, sliding_window: usize, capacity_seq_len: usize) -> Self {
+        let k = RotatingCache::new(dim, sliding_window, capacity_seq_len);
+        let v = RotatingCache::new(dim, sliding_window, capacity_seq_len);
         Self::Rotating { k, v }
     }
 
@@ -301,19 +331,17 @@ impl KvCache {
     pub fn append(&mut self, k: &Tensor, v: &Tensor) -> Result<(Tensor, Tensor)> {
         let k = k.contiguous()?;
         let v = v.contiguous()?;
-        match self {
+        let (out_k, out_v) = match self {
             Self::Normal { k: kc, v: vc } => {
                 kc.append(&k)?;
                 vc.append(&v)?;
+                (kc.current_data()?, vc.current_data()?)
             }
             Self::Rotating { k: kc, v: vc } => {
-                kc.append(&k)?;
-                vc.append(&v)?;
+                let out_k = kc.append(&k)?;
+                let out_v = vc.append(&v)?;
+                (Some(out_k), Some(out_v))
             }
-        }
-        let (out_k, out_v) = match self {
-            Self::Normal { k, v } => (k.current_data()?, v.current_data()?),
-            Self::Rotating { k, v } => (k.current_data()?, v.current_data()?),
         };
         let k = match out_k {
             None => {
@@ -375,11 +403,16 @@ impl KvCache {
             }
         }
     }
+
+    pub fn is_rotating(&self) -> bool {
+        matches!(self, Self::Rotating { .. })
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct NormalCache(pub Vec<KvCache>);
 
+#[derive(Debug)]
 pub enum NormalCacheType {
     Normal { max_seq_len: usize },
     SlidingWindow { window: usize },
@@ -409,7 +442,8 @@ impl NormalCache {
             Some(sliding_window) => Arc::new(Mutex::new(Self(vec![
                 KvCache::new_rotating(
                     2,
-                    sliding_window
+                    sliding_window,
+                    Self::CACHE_GROW_SIZE
                 );
                 len
             ]))),
@@ -432,7 +466,7 @@ impl NormalCache {
                     caches.push(KvCache::new_normal(2, max_seq_len, Self::CACHE_GROW_SIZE));
                 }
                 NormalCacheType::SlidingWindow { window } => {
-                    caches.push(KvCache::new_rotating(2, window));
+                    caches.push(KvCache::new_rotating(2, window, Self::CACHE_GROW_SIZE));
                 }
             }
         }
@@ -501,9 +535,10 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
         };
 
         let mut caches = Vec::new();
-        for (k_cache, v_cache) in new_k_cache.into_iter().zip(new_v_cache) {
+        for (layer_idx, (k_cache, v_cache)) in new_k_cache.into_iter().zip(new_v_cache).enumerate()
+        {
             // Use this for the various parameters. Assumes all seqs are from one model.
-            match seq0_cache[0].as_ref().unwrap() {
+            match seq0_cache[layer_idx].as_ref().unwrap() {
                 KvCache::Normal { k: old_k, .. } => {
                     let template_cache_dim = old_k.dim;
                     let template_cache_csl = old_k.current_seq_len;
@@ -532,6 +567,7 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
                     let template_cache_csl = old_k.current_seq_len;
                     let template_cache_msl = old_k.max_seq_len;
                     let template_cache_offset = old_k.offset;
+                    let template_cache_capsl = old_k.capacity_seq_len;
 
                     caches.push(KvCache::Rotating {
                         k: RotatingCache {
@@ -540,6 +576,7 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
                             current_seq_len: template_cache_csl,
                             max_seq_len: template_cache_msl,
                             offset: template_cache_offset,
+                            capacity_seq_len: template_cache_capsl,
                         },
                         v: RotatingCache {
                             all_data: v_cache.map(|x| x.contiguous().unwrap()),
@@ -547,6 +584,7 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
                             current_seq_len: template_cache_csl,
                             max_seq_len: template_cache_msl,
                             offset: template_cache_offset,
+                            capacity_seq_len: template_cache_capsl,
                         },
                     });
                 }
@@ -620,6 +658,7 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
                                 current_seq_len: cache_k.current_seq_len,
                                 max_seq_len: cache_k.max_seq_len,
                                 offset: cache_k.offset,
+                                capacity_seq_len: cache_k.capacity_seq_len,
                             },
                             v: RotatingCache {
                                 all_data: Some(v),
@@ -627,6 +666,7 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
                                 current_seq_len: cache_v.current_seq_len,
                                 max_seq_len: cache_v.max_seq_len,
                                 offset: cache_v.offset,
+                                capacity_seq_len: cache_v.capacity_seq_len,
                             },
                         });
                     }
@@ -659,7 +699,7 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
             None
         };
 
-        let old_cache = pipeline.cache().normal().0[0].clone();
+        let old_caches = pipeline.cache().normal().0.clone();
 
         for (layer_idx, layer) in pipeline.cache().normal().0.iter_mut().enumerate() {
             if !load_preallocated_cache {
@@ -696,7 +736,7 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
             };
 
             // Use this for the various parameters. Assumes all seqs are from one model.
-            match &old_cache {
+            match &old_caches[layer_idx] {
                 KvCache::Normal { k, .. } => {
                     let template_cache_dim = k.dim;
                     let template_cache_msl = k.max_seq_len;
@@ -731,6 +771,7 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
                             current_seq_len: 0,
                             max_seq_len: template_cache_msl,
                             offset: 0,
+                            capacity_seq_len: 0,
                         },
                         v: RotatingCache {
                             all_data: None,
@@ -738,6 +779,7 @@ impl<T: CacheManagerMixin + MetadataMixin + ?Sized> CacheManager<T> for NormalCa
                             current_seq_len: 0,
                             max_seq_len: template_cache_msl,
                             offset: 0,
+                            capacity_seq_len: 0,
                         },
                     };
                     *layer = cache;

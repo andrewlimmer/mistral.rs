@@ -21,7 +21,8 @@ use crate::{
         deserialize_tensor, fake_deserialize_tensor, serialize_tensor, version_is_compatible,
         BitWiseOp, LeftshiftOp, UQFF_VERSION,
     },
-    IsqType, MatMul, QuantMethod, QuantMethodConfig, QuantizedSerde, QuantizedSerdeType,
+    IsqType, MatMul, QuantMethod, QuantMethodConfig, QuantizeOntoGuard, QuantizedSerde,
+    QuantizedSerdeType,
 };
 
 #[cfg(feature = "cuda")]
@@ -152,11 +153,12 @@ impl HqqBits {
                         (10. * (wq_in.dims()[0] as f64 / 10.).ceil()) as usize,
                         wq_in.dims()[1],
                     ),
-                    DType::I32,
+                    DType::U32,
                     wq_in.device(),
                 )?;
-                let wq =
-                    wq.slice_assign(&[&(..wq_in.dims()[0]), &..], &wq_in.to_dtype(DType::I32)?)?;
+                let wq = wq
+                    .slice_assign(&[&(..wq_in.dims()[0]), &..], &wq_in.to_dtype(DType::U32)?)?
+                    .to_dtype(DType::I32)?;
                 let step = (wq.dims()[0] as f64 / 10.) as usize;
 
                 let a = wq.narrow(0, 0, step)?;
@@ -593,7 +595,9 @@ impl QuantMethod for HqqLayer {
         device: Device,
         n_quantized: &AtomicUsize,
         imatrix_weight: Option<Vec<f32>>,
+        guard: QuantizeOntoGuard,
     ) -> Result<Arc<dyn QuantMethod>> {
+        let _acquired_quantize_guard = guard.acquire();
         if imatrix_weight.is_some() {
             // TODO just warn?
             candle_core::bail!("HQQ does not support imatrix.");

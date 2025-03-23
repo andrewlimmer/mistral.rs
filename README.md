@@ -31,19 +31,25 @@ Please submit requests for new models [here](https://github.com/EricLBuehler/mis
 - Check out UQFF for prequantized models of various methods!
     - Models can be found [here](https://huggingface.co/collections/EricB/uqff-670e4a49d56ecdd3f7f0fd4c).
 
-- 💎💎💎 Run the **Gemma 3** Model with 128k context length and vision support: [documentation](docs/GEMMA3.md)
+- 💎💎💎 Run the entire **Gemma 3** Model family (1b, 4b, 12b, 27b) with 128k context length and vision support: [documentation](docs/GEMMA3.md)
 
     ```
     ./mistralrs-server -i vision-plain -m google/gemma-3-4b-it -a gemma3
     ```
 
-- 🐋🐋🐋 Run the Deepseek R1/V3 model: [documentation](docs/DEEPSEEKV3.md)
+- Run the **Mistral 3** Model with 128k context length and strong vision support: [documentation](docs/MISTRAL3.md)
+
+    ```
+    ./mistralrs-server -i --isq q4k vision-plain -m mistralai/Mistral-Small-3.1-24B-Instruct-2503 -a mistral3
+    ```
+
+- 🐋🐋🐋 Run the **Deepseek R1/V3** model with automatic **tensor parallelism**: [documentation](docs/DEEPSEEKV3.md)
 
     ```
     ./mistralrs-server -i --isq Q4K plain -m deepseek-ai/DeepSeek-R1
     ```
 
-- 🐋🐋🐋 Run the Deepseek R1 [distillations](https://huggingface.co/collections/deepseek-ai/deepseek-r1-678e1e131c0169c0bc89728d) out of the box
+- 🐋🐋🐋 Run the **Deepseek R1** [distillations](https://huggingface.co/collections/deepseek-ai/deepseek-r1-678e1e131c0169c0bc89728d) out of the box
 
     ```
     ./mistralrs-server -i --isq Q4K plain -m deepseek-ai/DeepSeek-R1-Distill-Llama-8B
@@ -78,7 +84,7 @@ Please submit requests for new models [here](https://github.com/EricLBuehler/mis
     ./mistralrs-server -i --isq Q4K plain -m meta-llama/Llama-3.2-3B-Instruct --calibration-file calibration_data/calibration_datav3_small.txt
     ```
 
-- 🌲📷 Run the FLUX.1 diffusion model: [documentation and guide here](docs/FLUX.md)
+- 🌲📷 Run the **FLUX.1** diffusion model: [documentation and guide here](docs/FLUX.md)
 
     <img src="https://github.com/user-attachments/assets/82bf5009-e3e9-402b-acf9-c48a52c7721b" width = "400" height = "267">
 
@@ -101,6 +107,7 @@ Mistral.rs supports several model categories:
 - [ISQ](docs/ISQ.md) (In situ quantization): run `.safetensors` models directly from 🤗 Hugging Face by quantizing in-place
     - Enhance performance with an [imatrix](docs/IMATRIX.md)!
 - Automatic [device mapping](docs/DEVICE_MAPPING.md) to easily load and run models across multiple GPUs and CPU.
+- Specify custom chat templates easily: [chat templates](docs/CHAT_TOK.md)
 
 **Fast**:
 - Apple silicon support: ARM NEON, Accelerate, Metal
@@ -121,7 +128,7 @@ Mistral.rs supports several model categories:
 - First X-LoRA inference platform with first class support
 - [AnyMoE](docs/ANYMOE.md): Build a memory-efficient MoE model from anything, in seconds
 - Various [sampling and penalty](docs/SAMPLING.mds) methods
-- Tool calling: [docs](docs/TOOL_CALLING.md)
+- Native tool calling support for Llama, Mistral Small, Mistral Nemo, and Hermes models: [docs](docs/TOOL_CALLING.md)
 - Prompt chunking: process large prompts in a more manageable way
 
 **Advanced features**:
@@ -171,6 +178,7 @@ https://github.com/EricLBuehler/mistral.rs/assets/65165915/09d9a30f-1e22-4b9a-90
 |Phi 4 Multimodal|✅| |✅| |
 |Qwen2.5-VL|✅| |✅| |
 |Gemma 3|✅| |✅|✅|
+|Mistral 3|✅| |✅|✅|
 
 ## APIs and Integrations
 
@@ -443,6 +451,7 @@ If you do not specify the architecture, an attempt will be made to use the model
 - `phi4mm`
 - `qwen2_5vl`
 - `gemma3`
+- `mistral3`
 
 ### Supported GGUF architectures
 
@@ -545,6 +554,7 @@ Please submit more benchmarks via raising an issue!
 |MiniCPM-O 2.6| | |✅|
 |Qwen2.5-VL| | |✅|
 |Gemma 3| | |✅|
+|Mistral 3| | |✅|
 
 **Device mapping support**
 |Model category|Supported|
@@ -578,6 +588,7 @@ Please submit more benchmarks via raising an issue!
 |MiniCPM-O 2.6| | | |
 |Qwen2.5-VL| | | |
 |Gemma 3| | | |
+|Mistral 3| | | |
 
 **AnyMoE support**
 |Model|AnyMoE|
@@ -604,6 +615,7 @@ Please submit more benchmarks via raising an issue!
 |MiniCPM-O 2.6| |
 |Qwen2.5-VL| |
 |Gemma 3|✅|
+|Mistral 3|✅|
 
 ### Using derivative model
 

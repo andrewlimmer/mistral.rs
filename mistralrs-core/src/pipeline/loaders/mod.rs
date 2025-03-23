@@ -26,8 +26,8 @@ pub use normal_loaders::{
 use tracing::{info, warn};
 pub use vision_loaders::{
     Gemma3Loader, Idefics2Loader, Idefics3Loader, LLaVALoader, LLaVANextLoader, MiniCpmOLoader,
-    Phi3VLoader, Phi4MMLoader, Qwen2VLLoader, Qwen2_5VLLoader, VLlamaLoader, VisionLoaderType,
-    VisionModel, VisionModelLoader,
+    Mistral3Loader, Phi3VLoader, Phi4MMLoader, Qwen2VLLoader, Qwen2_5VLLoader, VLlamaLoader,
+    VisionLoaderType, VisionModel, VisionModelLoader,
 };
 
 pub use diffusion_loaders::{
@@ -96,8 +96,8 @@ pub trait ModelPaths: AsAny + Debug + Send + Sync {
     /// Get the processor config (for the vision models). This is primarily used for the chat template.
     fn get_processor_config(&self) -> &Option<PathBuf>;
 
-    /// Get the explicit chat template. If specified, this overwrites anything in the tokenizer_config.json
-    fn get_chat_template_json(&self) -> &Option<PathBuf>;
+    /// Get the explicit chat template.
+    fn get_chat_template_explicit(&self) -> &Option<PathBuf>;
 }
 
 #[derive(Clone, Debug)]
@@ -196,7 +196,7 @@ impl ModelPaths for LocalModelPaths<PathBuf> {
     fn get_processor_config(&self) -> &Option<PathBuf> {
         &self.processor_config
     }
-    fn get_chat_template_json(&self) -> &Option<PathBuf> {
+    fn get_chat_template_explicit(&self) -> &Option<PathBuf> {
         &self.chat_template_json_filename
     }
 }

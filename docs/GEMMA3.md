@@ -21,21 +21,22 @@ We support an OpenAI compatible HTTP API for vision models. This example demonst
 ---
 
 **Image:**
+
 <img src="https://www.nhmagazine.com/content/uploads/2019/05/mtwashingtonFranconia-2-19-18-108-Edit-Edit.jpg" alt="Mount Washington" width = "1000" height = "666">
 <h6><a href = "https://www.nhmagazine.com/mount-washington/">Credit</a></h6>
 
 **Prompt:**
+```
+What is this?
+```
+
+**Output:**
 ```
 image shows Mount Washington in New Hampshire, USA. It's a prominent peak in the White Mountains, known for its extreme weather conditions and being the highest peak in the Northeastern United States. The image captures it covered in snow with a dramatic sky above. The structures at the summit are communication towers.
 
 
 
 The winding path visible on the mountain slopes appears to be part of the Mount Washington Auto Road, a historic road that allows vehicles to drive to the summit.
-```
-
-**Output:**
-```
-A mountain with snow on it.
 ```
 
 ---
@@ -98,7 +99,7 @@ print(resp)
 ## Rust
 You can find this example [here](../mistralrs/examples/gemma3/main.rs).
 
-This is a minimal example of running the Phi 4 Multimodal model with a dummy image.
+This is a minimal example of running the Gemma 3 model with a dummy image.
 
 ```rust
 use anyhow::Result;

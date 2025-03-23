@@ -9,8 +9,8 @@ use super::{
     VisionModel, VisionModelLoader, VisionPromptPrefixer, XLoraPaths,
 };
 use super::{
-    Idefics2Loader, Idefics3Loader, LLaVALoader, LLaVANextLoader, Phi3VLoader, Qwen2_5VLLoader,
-    VisionLoaderType,
+    Idefics2Loader, Idefics3Loader, LLaVALoader, LLaVANextLoader, Mistral3Loader, Phi3VLoader,
+    Qwen2_5VLLoader, VisionLoaderType,
 };
 use crate::device_map::{self, DeviceMapper};
 use crate::distributed::{self, WorkerTransferData};
@@ -87,6 +87,7 @@ pub struct VisionLoader {
     token_source: RwLock<Option<TokenSource>>,
     revision: RwLock<Option<String>>,
     from_uqff: RwLock<Option<PathBuf>>,
+    jinja_explicit: Option<String>,
 }
 
 #[derive(Default)]
@@ -97,6 +98,7 @@ pub struct VisionLoaderBuilder {
     kind: ModelKind,
     chat_template: Option<String>,
     tokenizer_json: Option<String>,
+    jinja_explicit: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -118,12 +120,14 @@ impl VisionLoaderBuilder {
         chat_template: Option<String>,
         tokenizer_json: Option<String>,
         model_id: Option<String>,
+        jinja_explicit: Option<String>,
     ) -> Self {
         Self {
             config,
             chat_template,
             tokenizer_json,
             model_id,
+            jinja_explicit,
             kind: ModelKind::Normal,
         }
     }
@@ -141,6 +145,7 @@ impl VisionLoaderBuilder {
             VisionLoaderType::Phi4MM => Box::new(Phi4MMLoader),
             VisionLoaderType::Qwen2_5VL => Box::new(Qwen2_5VLLoader),
             VisionLoaderType::Gemma3 => Box::new(Gemma3Loader),
+            VisionLoaderType::Mistral3 => Box::new(Mistral3Loader),
         };
         Box::new(VisionLoader {
             inner: loader,
@@ -151,6 +156,7 @@ impl VisionLoaderBuilder {
             tokenizer_json: self.tokenizer_json,
             xlora_model_id: None,
             xlora_order: None,
+            jinja_explicit: self.jinja_explicit,
             token_source: RwLock::new(None),
             revision: RwLock::new(None),
             from_uqff: RwLock::new(None),
@@ -473,8 +479,9 @@ impl Loader for VisionLoader {
         });
         let chat_template = get_chat_template(
             paths,
+            &self.jinja_explicit,
             &paths
-                .get_chat_template_json()
+                .get_chat_template_explicit()
                 .as_ref()
                 .map(|x| x.to_string_lossy().to_string())
                 .clone(),

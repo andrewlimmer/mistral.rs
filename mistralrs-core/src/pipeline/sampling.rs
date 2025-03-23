@@ -53,7 +53,8 @@ pub(crate) async fn finish_or_add_toks_to_seq(
         let mut tool_use_is_done = false;
         if let Some(ref t) = seq.tools {
             if let Ok(Some(ref d)) = seq.peek_delta() {
-                (tool_use_still_possible, tool_use_is_done) = t.prefix_could_be_tool(d.as_str());
+                (tool_use_still_possible, tool_use_is_done) =
+                    t.prefix_could_be_tool(this, d.as_str());
             }
         };
 
@@ -61,7 +62,7 @@ pub(crate) async fn finish_or_add_toks_to_seq(
             if let Some(delta) = crate::handle_seq_error_ok!(seq.get_delta(), seq.responder()) {
                 if seq.get_mut_group().is_chat {
                     let (text_new, tool_calls) =
-                        parse_text_tools(delta.as_str(), seq.tools.clone())
+                        parse_text_tools(this, delta.as_str(), seq.tools.clone())
                             .map_err(candle_core::Error::msg)?;
 
                     if !tool_calls.is_empty() && is_done.is_none() {
@@ -202,8 +203,9 @@ pub(crate) async fn finish_or_add_toks_to_seq(
             };
 
             if seq.get_mut_group().is_chat {
-                let (text_new, tool_calls) = parse_text_tools(text.as_str(), seq.tools.clone())
-                    .map_err(candle_core::Error::msg)?;
+                let (text_new, tool_calls) =
+                    parse_text_tools(this, text.as_str(), seq.tools.clone())
+                        .map_err(candle_core::Error::msg)?;
                 let choice = crate::Choice {
                     finish_reason: fixup_sentencepiece!(reason),
                     index: seq.get_response_index(),
@@ -370,8 +372,9 @@ pub async fn sample_sequence(
                 }
             } else if step_res.is_stop() {
                 let mut acc = vec![-f32::INFINITY; logits.shape().dims1().unwrap()];
-                let trie = llg.tok_trie();
-                acc[trie.eos_token() as usize] = 0.0;
+                for eos_tok in seq.eos_tokens() {
+                    acc[*eos_tok as usize] = 0.0;
+                }
                 Some(acc)
             } else {
                 None
